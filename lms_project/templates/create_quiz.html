@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}New assessment{% endblock %}
+{% block content %}
+
+<section class="form-card wide">
+  <div class="panel-head">
+    <span class="tally">Teacher</span>
+    <h2>Build an assessment</h2>
+  </div>
+
+  <form method="POST" class="stack-form" id="quiz-form">
+    <label for="title">Assessment title</label>
+    <input type="text" id="title" name="title" placeholder="e.g. Unit 3 Check" required>
+
+    <div id="question-list"></div>
+
+    <button type="button" class="btn-secondary" id="add-question">+ Add question</button>
+    <button type="submit">Create assessment</button>
+  </form>
+
+  <a class="back-link" href="{{ url_for('index') }}">&larr; Back to dashboard</a>
+</section>
+
+<template id="question-template">
+  <div class="question-block">
+    <div class="question-block-head">
+      <span class="q-index"></span>
+      <button type="button" class="remove-question">Remove</button>
+    </div>
+    <label>Question text</label>
+    <input type="text" name="q_text" required>
+
+    <div class="option-grid">
+      <div>
+        <label>Option A</label>
+        <input type="text" name="q_a" required>
+      </div>
+      <div>
+        <label>Option B</label>
+        <input type="text" name="q_b" required>
+      </div>
+      <div>
+        <label>Option C</label>
+        <input type="text" name="q_c" required>
+      </div>
+      <div>
+        <label>Option D</label>
+        <input type="text" name="q_d" required>
+      </div>
+    </div>
+
+    <label>Correct option</label>
+    <select name="q_correct" required>
+      <option value="a">A</option>
+      <option value="b">B</option>
+      <option value="c">C</option>
+      <option value="d">D</option>
+    </select>
+  </div>
+</template>
+
+<script>
+  const list = document.getElementById('question-list');
+  const template = document.getElementById('question-template');
+  const addBtn = document.getElementById('add-question');
+
+  function renumber() {
+    list.querySelectorAll('.question-block').forEach((block, i) => {
+      block.querySelector('.q-index').textContent = 'Question ' + String(i + 1).padStart(2, '0');
+    });
+  }
+
+  function addQuestion() {
+    const clone = template.content.cloneNode(true);
+    clone.querySelector('.remove-question').addEventListener('click', (e) => {
+      e.target.closest('.question-block').remove();
+      renumber();
+    });
+    list.appendChild(clone);
+    renumber();
+  }
+
+  addBtn.addEventListener('click', addQuestion);
+  // Start with one question ready to fill in
+  addQuestion();
+
+  document.getElementById('quiz-form').addEventListener('submit', (e) => {
+    if (list.children.length === 0) {
+      e.preventDefault();
+      alert('Add at least one question before creating the assessment.');
+    }
+  });
+</script>
+
+{% endblock %}

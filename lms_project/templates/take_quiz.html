@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ assessment['title'] }}{% endblock %}
+{% block content %}
+
+<section class="form-card wide">
+  <div class="panel-head">
+    <span class="tally">Assessment</span>
+    <h2>{{ assessment['title'] }}</h2>
+  </div>
+
+  {% if session['role'] == 'teacher' %}
+    <p class="hint">Previewing as teacher — submitting will not create a student record... actually it will log a submission under your account, so use with care.</p>
+  {% endif %}
+
+  {% if questions %}
+  <form method="POST" action="{{ url_for('submit_quiz', quiz_id=assessment['id']) }}" class="stack-form">
+    {% for q in questions %}
+    <div class="question-block readonly-index">
+      <div class="question-block-head">
+        <span class="q-index">Question {{ '%02d' % loop.index }}</span>
+      </div>
+      <p class="q-text">{{ q['text'] }}</p>
+      <div class="option-choice">
+        <label><input type="radio" name="question_{{ q['id'] }}" value="a" required> {{ q['option_a'] }}</label>
+        <label><input type="radio" name="question_{{ q['id'] }}" value="b"> {{ q['option_b'] }}</label>
+        <label><input type="radio" name="question_{{ q['id'] }}" value="c"> {{ q['option_c'] }}</label>
+        <label><input type="radio" name="question_{{ q['id'] }}" value="d"> {{ q['option_d'] }}</label>
+      </div>
+    </div>
+    {% endfor %}
+
+    <button type="submit">Submit answers</button>
+  </form>
+  {% else %}
+    <p class="empty">This assessment has no questions yet.</p>
+  {% endif %}
+
+  <a class="back-link" href="{{ url_for('index') }}">&larr; Back to dashboard</a>
+</section>
+
+{% endblock %}
