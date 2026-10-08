@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Create account · Roll Call LMS</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="board board-fullscreen">
+  <div class="auth-card">
+    <div class="auth-mark">▦</div>
+    <h1>Create an account</h1>
+    <p class="auth-sub">Teachers and students both sign up here.</p>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-stack">
+          {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <form method="POST" class="auth-form">
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" required autofocus>
+
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" required minlength="4">
+
+      <label for="role">I am a</label>
+      <select id="role" name="role" onchange="document.getElementById('teacher-code-row').style.display = (this.value === 'teacher') ? 'block' : 'none';">
+        <option value="student">Student</option>
+        <option value="teacher">Teacher</option>
+      </select>
+
+      <div id="teacher-code-row" style="display: none;">
+        <label for="teacher_code">Teacher invite code</label>
+        <input type="text" id="teacher_code" name="teacher_code" placeholder="Ask your administrator">
+      </div>
+
+      <button type="submit">Create account</button>
+    </form>
+
+    <p class="auth-foot">
+      Already have an account? <a href="{{ url_for('login') }}">Sign in</a>
+    </p>
+  </div>
+</body>
+</html>
