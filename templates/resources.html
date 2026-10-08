@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Resources{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2>Shared Resources</h2>
+  <a href="{{ url_for('upload_resource') }}" class="btn btn-brand"><i class="bi bi-upload"></i> Share Resource</a>
+</div>
+<div class="mb-3">
+  <a href="{{ url_for('resources') }}" class="btn btn-sm {% if not current_type %}btn-primary{% else %}btn-outline-primary{% endif %}">All</a>
+  <a href="{{ url_for('resources', type='notes') }}" class="btn btn-sm {% if current_type=='notes' %}btn-primary{% else %}btn-outline-primary{% endif %}">Notes</a>
+  <a href="{{ url_for('resources', type='revision') }}" class="btn btn-sm {% if current_type=='revision' %}btn-primary{% else %}btn-outline-primary{% endif %}">Revision Exercises</a>
+  <a href="{{ url_for('resources', type='other') }}" class="btn btn-sm {% if current_type=='other' %}btn-primary{% else %}btn-outline-primary{% endif %}">Other</a>
+</div>
+<div class="row g-3">
+  {% for r in resources %}
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title">{{ r.title }}</h5>
+        <span class="badge bg-info text-dark mb-2">{{ r.resource_type }}</span>
+        <p class="card-text small text-muted">{{ r.description or 'No description' }}</p>
+        <p class="small mb-0">By {{ r.uploader_name }} &middot; {{ r.created_at[:10] if r.created_at else '' }}</p>
+      </div>
+      <div class="card-footer bg-white d-flex gap-2">
+        {% if r.filename %}
+        <a href="{{ url_for('download_resource', rid=r.id) }}" class="btn btn-sm btn-outline-primary">Download</a>
+        {% endif %}
+        {% if r.uploaded_by == current_user.id or current_user.is_teacher %}
+        <form method="post" action="{{ url_for('delete_resource', rid=r.id) }}" onsubmit="return confirm('Delete this resource?')">
+          <button class="btn btn-sm btn-outline-danger">Delete</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="col-12"><div class="alert alert-info">No resources found. Be the first to share!</div></div>
+  {% endfor %}
+</div>
+{% endblock %}

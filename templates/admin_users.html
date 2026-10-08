@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Users (Admin){% endblock %}
+{% block content %}
+<h2 class="mb-3">Registered Users</h2>
+<p class="text-muted">Teachers act as administrators and can view all users.</p>
+<div class="table-responsive">
+  <table class="table table-hover bg-white">
+    <thead class="table-light">
+      <tr>
+        <th>ID</th>
+        <th>Full Name</th>
+        <th>Username</th>
+        <th>Email</th>
+        <th>Role</th>
+        <th>Joined</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td>{{ u.id }}</td>
+        <td>{{ u.full_name }}</td>
+        <td>{{ u.username }}</td>
+        <td>{{ u.email }}</td>
+        <td><span class="badge {% if u.role=='teacher' %}bg-primary{% else %}bg-secondary{% endif %}">{{ u.role }}</span></td>
+        <td>{{ u.created_at[:10] if u.created_at else '' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

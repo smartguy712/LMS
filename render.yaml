@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: siyafundza-lms
+    runtime: python
+    plan: starter            # persistent disks require a paid plan
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD
+        sync: false           # you enter this in the Render dashboard on first deploy
+      - key: ADMIN_EMAIL
+        value: admin@siyafundza.school
+      - key: LMS_DB
+        value: /var/data/lms.db
+      - key: UPLOAD_FOLDER
+        value: /var/data/uploads
+    disk:
+      name: lms-data
+      mountPath: /var/data
+      sizeGB: 1

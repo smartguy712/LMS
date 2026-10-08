@@ -1,0 +1,1561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Siyafundza LMS</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+  <style>
+    :root { --brand: #1F4E79; --brand-light: #2E86AB; --bg: #f0f4f8; }
+    body { background: var(--bg); min-height: 100vh; margin: 0; font-family: system-ui, -apple-system, sans-serif; }
+    .navbar { background: var(--brand) !important; }
+    .navbar-brand, .nav-link, .navbar-text { color: #fff !important; }
+    .btn-brand { background: var(--brand); color: #fff; border: none; }
+    .btn-brand:hover { background: var(--brand-light); color: #fff; }
+    .card { border: none; box-shadow: 0 2px 10px rgba(0,0,0,.07); border-radius: 12px; }
+    .stat-num { font-size: 2rem; font-weight: 700; color: var(--brand); }
+    .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #1F4E79 0%, #2E86AB 100%); }
+    .login-card { max-width: 420px; width: 100%; }
+    .page-title { color: var(--brand); font-weight: 700; }
+    .q-card { border-left: 4px solid var(--brand); }
+    .timer-box { position: sticky; top: 0; z-index: 100; background: #fff3cd; border: 2px solid #ffc107;
+      border-radius: 10px; padding: 0.75rem 1.25rem; margin-bottom: 1rem; font-size: 1.25rem; font-weight: 700; }
+    .timer-box.urgent { background: #f8d7da; border-color: #dc3545; color: #721c24; animation: pulse 1s infinite; }
+    @keyframes pulse { 50% { opacity: 0.75; } }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.2.0/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.24.0/babel.min.js" crossorigin></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js" crossorigin></script>
+
+  <script type="text/babel">
+const { useState, useEffect, useRef, createContext, useContext, useCallback } = React;
+
+const API = {
+  async request(path, options = {}) {
+    const opts = { credentials: "include", headers: { ...(options.headers || {}) }, ...options };
+    if (opts.body && typeof opts.body === "object" && !(opts.body instanceof FormData)) {
+      opts.headers["Content-Type"] = "application/json";
+      opts.body = JSON.stringify(opts.body);
+    }
+    const res = await fetch("/api" + path, opts);
+    let data = {};
+    try { data = await res.json(); } catch (e) {}
+    if (!res.ok) throw new Error(data.error || data.message || ("Error " + res.status));
+    return data;
+  },
+  get: (p) => API.request(p),
+  post: (p, body) => API.request(p, { method: "POST", body: body || {} }),
+  put: (p, body) => API.request(p, { method: "PUT", body: body || {} }),
+  del: (p) => API.request(p, { method: "DELETE" }),
+  upload: (p, fd) => API.request(p, { method: "POST", body: fd }),
+};
+
+const AuthCtx = createContext(null);
+function useAuth() { return useContext(AuthCtx); }
+
+function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    API.get("/me").then((d) => setUser(d.user)).catch(() => setUser(null)).finally(() => setLoading(false));
+  }, []);
+  const login = async (username, password) => {
+    const d = await API.post("/login", { username, password });
+    setUser(d.user);
+    return d;
+  };
+  const register = async (payload) => API.post("/register", payload);
+  const logout = async () => {
+    try { await API.post("/logout", {}); } catch (e) {}
+    setUser(null);
+  };
+  return (
+    <AuthCtx.Provider value={{ user, loading, login, register, logout }}>
+      {children}
+    </AuthCtx.Provider>
+  );
+}
+
+function Alert({ type, message, onClose }) {
+  if (!message) return null;
+  return (
+    <div className={"alert alert-" + type + " alert-dismissible"}>
+      {message}
+      {onClose && <button type="button" className="btn-close" onClick={onClose}></button>}
+    </div>
+  );
+}
+
+function Loading() {
+  return (
+    <div className="text-center p-5">
+      <div className="spinner-border text-primary"></div>
+      <p className="mt-2 text-muted">Loading…</p>
+    </div>
+  );
+}
+
+function ErrorBoundary({ children, onReset }) {
+  const [error, setError] = useState(null);
+  if (error) {
+    return (
+      <div className="container py-4">
+        <div className="alert alert-danger">
+          <strong>Something went wrong.</strong>
+          <pre className="small mt-2 mb-2">{String(error)}</pre>
+          <button className="btn btn-brand btn-sm" onClick={() => { setError(null); if (onReset) onReset(); }}>
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <EBInner onError={setError}>{children}</EBInner>
+  );
+}
+
+class EBInner extends React.Component {
+  componentDidCatch(error) { this.props.onError(error.message || String(error)); }
+  render() { return this.props.children; }
+}
+
+function Navbar({ page, navigate }) {
+  const { user, logout } = useAuth();
+  if (!user) return null;
+  const items = [
+    { id: "dashboard", label: "Dashboard" },
+    { id: "resources", label: "Resources" },
+    { id: "tests", label: "Tests" },
+  ];
+  if (user.role === "teacher") {
+    items.push({ id: "submissions", label: "Submissions" });
+    items.push({ id: "users", label: "Users" });
+  }
+  return (
+    <nav className="navbar navbar-expand-lg navbar-dark mb-4">
+      <div className="container flex-wrap">
+        <a className="navbar-brand fw-bold" href="#" onClick={(e) => { e.preventDefault(); navigate("dashboard"); }}>
+          <i className="bi bi-mortarboard-fill me-1"></i> Siyafundza LMS
+        </a>
+        <div className="navbar-nav flex-row gap-2 me-auto">
+          {items.map((it) => (
+            <a key={it.id} href="#" className={"nav-link" + (page === it.id ? " fw-bold text-decoration-underline" : "")}
+              onClick={(e) => { e.preventDefault(); navigate(it.id); }}>{it.label}</a>
+          ))}
+        </div>
+        <span className="navbar-text me-3">
+          <i className="bi bi-person-circle"></i> {user.full_name}{" "}
+          <span className="badge bg-light text-dark">{user.role}</span>
+        </span>
+        <button className="btn btn-outline-light btn-sm" onClick={async () => { await logout(); navigate("login"); }}>Logout</button>
+      </div>
+    </nav>
+  );
+}
+
+function LoginPage({ navigate }) {
+  const { login } = useAuth();
+  const [form, setForm] = useState({ username: "", password: "" });
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true); setError("");
+    try { await login(form.username, form.password); navigate("dashboard"); }
+    catch (err) { setError(err.message); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="login-wrap">
+      <div className="card login-card p-4 shadow-lg">
+        <div className="text-center mb-3">
+          <i className="bi bi-mortarboard-fill" style={{ fontSize: "2.5rem", color: "#1F4E79" }}></i>
+          <h3 className="mt-2">Siyafundza LMS</h3>
+          <p className="text-muted">Sign in to continue</p>
+        </div>
+        <Alert type="danger" message={error} onClose={() => setError("")} />
+        <form onSubmit={submit}>
+          <div className="mb-3">
+            <label className="form-label">Username</label>
+            <input className="form-control" value={form.username} required autoFocus
+              onChange={(e) => setForm({ ...form, username: e.target.value })} />
+          </div>
+          <div className="mb-3">
+            <label className="form-label">Password</label>
+            <input type="password" className="form-control" value={form.password} required
+              onChange={(e) => setForm({ ...form, password: e.target.value })} />
+          </div>
+          <button className="btn btn-brand w-100" disabled={busy}>{busy ? "Signing in…" : "Login"}</button>
+        </form>
+        <p className="text-center mt-3 mb-0">
+          No account? <a href="#" onClick={(e) => { e.preventDefault(); navigate("register"); }}>Register</a>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function RegisterPage({ navigate }) {
+  const { register } = useAuth();
+  const [form, setForm] = useState({ full_name: "", username: "", email: "", password: "", role: "student" });
+  const [error, setError] = useState("");
+  const [msg, setMsg] = useState("");
+  const submit = async (e) => {
+    e.preventDefault();
+    setError(""); setMsg("");
+    try {
+      await register(form);
+      setMsg("Registration successful! Please log in.");
+      setTimeout(() => navigate("login"), 1200);
+    } catch (err) { setError(err.message); }
+  };
+  return (
+    <div className="login-wrap">
+      <div className="card login-card p-4 shadow-lg">
+        <h3 className="mb-3">Create Student Account</h3>
+        <Alert type="danger" message={error} />
+        <Alert type="success" message={msg} />
+        <form onSubmit={submit}>
+          {["full_name", "username", "email", "password"].map((f) => (
+            <div className="mb-3" key={f}>
+              <label className="form-label text-capitalize">{f.replace("_", " ")}</label>
+              <input type={f === "password" ? "password" : f === "email" ? "email" : "text"}
+                className="form-control" required minLength={f === "password" ? 6 : undefined}
+                value={form[f]} onChange={(e) => setForm({ ...form, [f]: e.target.value })} />
+            </div>
+          ))}
+          <button className="btn btn-brand w-100">Register</button>
+        </form>
+        <p className="text-center mt-3 mb-0">
+          Have an account? <a href="#" onClick={(e) => { e.preventDefault(); navigate("login"); }}>Login</a>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function Dashboard({ navigate }) {
+  const { user } = useAuth();
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    let alive = true;
+    API.get("/dashboard").then((d) => { if (alive) setData(d); }).catch((e) => { if (alive) setErr(e.message); });
+    return () => { alive = false; };
+  }, []);
+  if (err) return <Alert type="danger" message={err} />;
+  if (!data) return <Loading />;
+
+  if (user.role === "teacher") {
+    return (
+      <div>
+        <h2 className="page-title mb-4">Teacher Dashboard</h2>
+        <div className="row g-3 mb-4">
+          <div className="col-md-4"><div className="card p-3 text-center"><div className="stat-num">{(data.tests || []).length}</div><div className="text-muted">My Tests</div></div></div>
+          <div className="col-md-4"><div className="card p-3 text-center"><div className="stat-num">{(data.pending || []).length}</div><div className="text-muted">Pending Grading</div></div></div>
+          <div className="col-md-4"><div className="card p-3 text-center"><div className="stat-num">{(data.resources || []).length}</div><div className="text-muted">Recent Resources</div></div></div>
+        </div>
+        <div className="row g-4">
+          <div className="col-md-6">
+            <div className="card">
+              <div className="card-header d-flex justify-content-between">
+                <span>My Tests</span>
+                <div>
+                  <button className="btn btn-sm btn-outline-primary me-1" onClick={() => navigate("import_test")}>Import</button>
+                  <button className="btn btn-sm btn-brand" onClick={() => navigate("create_test")}>+ New</button>
+                </div>
+              </div>
+              <ul className="list-group list-group-flush">
+                {(data.tests || []).map((t) => (
+                  <li key={t.id} className="list-group-item d-flex justify-content-between align-items-center">
+                    <span>{t.title} <span className="badge bg-secondary">{t.total_marks} marks</span></span>
+                    <button className="btn btn-sm btn-outline-primary" onClick={() => navigate("edit_test", { testId: t.id })}>Edit</button>
+                  </li>
+                ))}
+                {!(data.tests || []).length && <li className="list-group-item text-muted">No tests yet.</li>}
+              </ul>
+            </div>
+          </div>
+          <div className="col-md-6">
+            <div className="card">
+              <div className="card-header">Pending Submissions</div>
+              <ul className="list-group list-group-flush">
+                {(data.pending || []).map((s) => (
+                  <li key={s.id} className="list-group-item d-flex justify-content-between">
+                    <span>{s.student_name} – {s.test_title}</span>
+                    <button className="btn btn-sm btn-warning" onClick={() => navigate("grade", { submissionId: s.id })}>Grade</button>
+                  </li>
+                ))}
+                {!(data.pending || []).length && <li className="list-group-item text-muted">No pending submissions.</li>}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h2 className="page-title mb-4">Student Dashboard</h2>
+      <div className="row g-4">
+        <div className="col-md-6">
+          <div className="card">
+            <div className="card-header d-flex justify-content-between">
+              <span>Available Tests</span>
+              <button className="btn btn-sm btn-outline-primary" onClick={() => navigate("tests")}>View All</button>
+            </div>
+            <ul className="list-group list-group-flush">
+              {(data.tests || []).map((t) => (
+                <li key={t.id} className="list-group-item d-flex justify-content-between">
+                  <span>{t.title} <span className="badge bg-secondary">{t.total_marks} marks</span>
+                    <span className="badge bg-info text-dark ms-1">{t.duration_minutes} min</span>
+                  </span>
+                  <button className="btn btn-sm btn-brand" onClick={() => navigate("take_test", { testId: t.id })}>Take Test</button>
+                </li>
+              ))}
+              {!(data.tests || []).length && <li className="list-group-item text-muted">No tests available.</li>}
+            </ul>
+          </div>
+        </div>
+        <div className="col-md-6">
+          <div className="card">
+            <div className="card-header">My Recent Results</div>
+            <ul className="list-group list-group-flush">
+              {(data.my_subs || []).map((s) => (
+                <li key={s.id} className="list-group-item d-flex justify-content-between">
+                  <span>{s.test_title}{" "}
+                    {s.status === "graded"
+                      ? <span className="badge bg-success">{s.score}/{s.max_score}</span>
+                      : <span className="badge bg-warning text-dark">{s.status}</span>}
+                  </span>
+                  <button className="btn btn-sm btn-outline-secondary" onClick={() => navigate("result", { submissionId: s.id })}>View</button>
+                </li>
+              ))}
+              {!(data.my_subs || []).length && <li className="list-group-item text-muted">No submissions yet.</li>}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ResourcesPage() {
+  const { user } = useAuth();
+  const [items, setItems] = useState([]);
+  const [type, setType] = useState("");
+  const [err, setErr] = useState("");
+  const [show, setShow] = useState(false);
+  const [form, setForm] = useState({ title: "", description: "", resource_type: "notes" });
+  const [file, setFile] = useState(null);
+
+  const load = useCallback(() => {
+    const q = type ? "?type=" + type : "";
+    API.get("/resources" + q).then((d) => setItems(d.resources || [])).catch((e) => setErr(e.message));
+  }, [type]);
+  useEffect(() => { load(); }, [load]);
+
+  const upload = async (e) => {
+    e.preventDefault();
+    try {
+      const fd = new FormData();
+      fd.append("title", form.title);
+      fd.append("description", form.description);
+      fd.append("resource_type", form.resource_type);
+      if (file) fd.append("file", file);
+      await API.upload("/resources", fd);
+      setShow(false);
+      setForm({ title: "", description: "", resource_type: "notes" });
+      setFile(null);
+      load();
+    } catch (ex) { setErr(ex.message); }
+  };
+  const del = async (id) => {
+    if (!confirm("Delete?")) return;
+    await API.del("/resources/" + id);
+    load();
+  };
+
+  return (
+    <div>
+      <div className="d-flex justify-content-between mb-3">
+        <h2 className="page-title mb-0">Shared Resources</h2>
+        <button className="btn btn-brand" onClick={() => setShow(true)}>+ Share</button>
+      </div>
+      <div className="mb-3">
+        {["", "notes", "revision", "other"].map((t) => (
+          <button key={t || "all"} className={"btn btn-sm me-1 " + (type === t ? "btn-primary" : "btn-outline-primary")}
+            onClick={() => setType(t)}>{t || "All"}</button>
+        ))}
+      </div>
+      <Alert type="danger" message={err} onClose={() => setErr("")} />
+      {show && (
+        <div className="card p-3 mb-3">
+          <form onSubmit={upload}>
+            <input className="form-control mb-2" placeholder="Title" required value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })} />
+            <textarea className="form-control mb-2" placeholder="Description" rows="2" value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            <select className="form-select mb-2" value={form.resource_type}
+              onChange={(e) => setForm({ ...form, resource_type: e.target.value })}>
+              <option value="notes">Notes</option>
+              <option value="revision">Revision Exercise</option>
+              <option value="other">Other</option>
+            </select>
+            <input type="file" className="form-control mb-2" onChange={(e) => setFile(e.target.files[0])} />
+            <button className="btn btn-brand me-2">Share</button>
+            <button type="button" className="btn btn-outline-secondary" onClick={() => setShow(false)}>Cancel</button>
+          </form>
+        </div>
+      )}
+      <div className="row g-3">
+        {items.map((r) => (
+          <div className="col-md-4" key={r.id}>
+            <div className="card h-100">
+              <div className="card-body">
+                <h5>{r.title}</h5>
+                <span className="badge bg-info text-dark">{r.resource_type}</span>
+                <p className="small text-muted mt-2">{r.description || ""}</p>
+                <p className="small mb-0">By {r.uploader_name}</p>
+              </div>
+              <div className="card-footer bg-white d-flex gap-2">
+                {r.filename && <a className="btn btn-sm btn-outline-primary" href={"/api/resources/" + r.id + "/download"}>Download</a>}
+                {(r.uploaded_by === user.id || user.role === "teacher") && (
+                  <button className="btn btn-sm btn-outline-danger" onClick={() => del(r.id)}>Delete</button>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+        {!items.length && <div className="col-12"><div className="alert alert-info">No resources yet.</div></div>}
+      </div>
+    </div>
+  );
+}
+
+function TestsPage({ navigate }) {
+  const { user } = useAuth();
+  const [tests, setTests] = useState([]);
+  const [err, setErr] = useState("");
+  const load = () => API.get("/tests").then((d) => setTests(d.tests || [])).catch((e) => setErr(e.message));
+  useEffect(() => { load(); }, []);
+  const del = async (id) => {
+    if (!confirm("Delete this test?")) return;
+    await API.del("/tests/" + id);
+    load();
+  };
+  return (
+    <div>
+      <div className="d-flex justify-content-between mb-3 flex-wrap gap-2">
+        <h2 className="page-title mb-0">{user.role === "teacher" ? "My Tests" : "Available Tests"}</h2>
+        {user.role === "teacher" && (
+          <div>
+            <button className="btn btn-outline-primary me-2" onClick={() => navigate("import_test")}>
+              <i className="bi bi-upload"></i> Import Test
+            </button>
+            <button className="btn btn-brand" onClick={() => navigate("create_test")}>+ Create Test</button>
+          </div>
+        )}
+      </div>
+      <Alert type="danger" message={err} />
+      <div className="row g-3">
+        {tests.map((t) => (
+          <div className="col-md-6" key={t.id}>
+            <div className="card">
+              <div className="card-body">
+                <h5>{t.title}</h5>
+                <p className="small text-muted">{t.description || ""}</p>
+                <span className="badge bg-secondary me-1">{t.total_marks} marks</span>
+                <span className="badge bg-secondary me-1">{t.duration_minutes} min</span>
+                {user.role === "teacher" && (t.is_published
+                  ? <span className="badge bg-success">Published</span>
+                  : <span className="badge bg-warning text-dark">Draft</span>)}
+              </div>
+              <div className="card-footer bg-white d-flex gap-2">
+                {user.role === "teacher" ? (
+                  <>
+                    <button className="btn btn-sm btn-primary" onClick={() => navigate("edit_test", { testId: t.id })}>Edit</button>
+                    <button className="btn btn-sm btn-outline-danger" onClick={() => del(t.id)}>Delete</button>
+                  </>
+                ) : (
+                  <button className="btn btn-sm btn-brand" onClick={() => navigate("take_test", { testId: t.id })}>Take Test</button>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+        {!tests.length && <div className="col-12"><div className="alert alert-info">No tests found.</div></div>}
+      </div>
+    </div>
+  );
+}
+
+function CreateTestPage({ navigate }) {
+  const [form, setForm] = useState({ title: "", description: "", total_marks: 50, duration_minutes: 60 });
+  const [err, setErr] = useState("");
+  const submit = async (e) => {
+    e.preventDefault();
+    try {
+      const d = await API.post("/tests", form);
+      navigate("edit_test", { testId: d.test.id });
+    } catch (ex) { setErr(ex.message); }
+  };
+  return (
+    <div className="row justify-content-center">
+      <div className="col-md-7">
+        <div className="card p-4">
+          <h3 className="page-title">Create New Test</h3>
+          <Alert type="danger" message={err} />
+          <form onSubmit={submit}>
+            <div className="mb-3">
+              <label className="form-label">Title *</label>
+              <input className="form-control" required value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })} />
+            </div>
+            <div className="mb-3">
+              <label className="form-label">Description</label>
+              <textarea className="form-control" rows="2" value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            </div>
+            <div className="row">
+              <div className="col-6 mb-3">
+                <label className="form-label">Total Marks (max 50)</label>
+                <input type="number" className="form-control" min="1" max="50" value={form.total_marks}
+                  onChange={(e) => setForm({ ...form, total_marks: +e.target.value })} />
+              </div>
+              <div className="col-6 mb-3">
+                <label className="form-label">Duration (minutes)</label>
+                <input type="number" className="form-control" min="5" value={form.duration_minutes}
+                  onChange={(e) => setForm({ ...form, duration_minutes: +e.target.value })} />
+              </div>
+            </div>
+            <button className="btn btn-brand">Create & Add Questions</button>
+            <button type="button" className="btn btn-outline-secondary ms-2" onClick={() => navigate("tests")}>Cancel</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ===== IMPORT TEST (JSON / PDF / DOCX) ===== */
+function ImportTestPage({ navigate }) {
+  const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [rawText, setRawText] = useState("");
+  const [meta, setMeta] = useState({ title: "", total_marks: 50, duration_minutes: 60, default_marks: 5 });
+  const [source, setSource] = useState("");
+
+  const onFile = async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    setErr(""); setMsg(""); setPreview(null); setRawText(""); setSource("");
+    const name = (f.name || "").toLowerCase();
+
+    // JSON: parse locally
+    if (name.endsWith(".json")) {
+      try {
+        const text = await f.text();
+        const data = JSON.parse(text);
+        if (!data.title || !data.questions) throw new Error("JSON must have title and questions array");
+        setPreview(data);
+        setSource("json");
+      } catch (ex) {
+        setErr("Could not read JSON: " + ex.message);
+      }
+      return;
+    }
+
+    // PDF / DOCX / TXT: send to server for extraction + parsing
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", f);
+      fd.append("title", meta.title);
+      fd.append("total_marks", meta.total_marks);
+      fd.append("duration_minutes", meta.duration_minutes);
+      fd.append("default_marks", meta.default_marks);
+      const d = await API.upload("/tests/parse-file", fd);
+      setPreview(d.test);
+      setRawText(d.raw_text || "");
+      setSource(d.source || "file");
+      if (!(d.test.questions || []).length) {
+        setErr("No numbered questions were detected. Check the extracted text below and use a clearer format (1. 2. 3. with A) B) C) D) options).");
+      } else {
+        setMsg("Found " + d.questions_found + " question(s). Review and import when ready.");
+      }
+    } catch (ex) {
+      setErr(ex.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doImport = async () => {
+    if (!preview) return;
+    setBusy(true); setErr("");
+    try {
+      // Apply meta overrides
+      const payload = {
+        ...preview,
+        title: meta.title || preview.title,
+        total_marks: meta.total_marks || preview.total_marks,
+        duration_minutes: meta.duration_minutes || preview.duration_minutes,
+      };
+      const d = await API.post("/tests/import", payload);
+      setMsg(d.message || "Imported!");
+      setTimeout(() => navigate("edit_test", { testId: d.test.id }), 800);
+    } catch (ex) { setErr(ex.message); setBusy(false); }
+  };
+
+  const sample = {
+    title: "Sample Grade 4 RE Test",
+    description: "Imported sample test",
+    total_marks: 20,
+    duration_minutes: 30,
+    questions: [
+      { question_text: "Who built the ark?", question_type: "mcq", marks: 5, correct_answer: "A",
+        options: ["Noah", "Moses", "David", "Jonah"] },
+      { question_text: "Name the first man created by God.", question_type: "short", marks: 5, correct_answer: "Adam" },
+      { question_text: "Explain why we should obey God.", question_type: "essay", marks: 10, correct_answer: "" }
+    ]
+  };
+
+  const downloadSample = () => {
+    const blob = new Blob([JSON.stringify(sample, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "sample_test.json";
+    a.click();
+  };
+
+  return (
+    <div className="row justify-content-center">
+      <div className="col-md-9">
+        <div className="card p-4">
+          <h3 className="page-title">Import Test</h3>
+          <p className="text-muted">
+            Upload a <strong>PDF</strong>, <strong>Word (.docx)</strong>, <strong>JSON</strong>, or <strong>TXT</strong> file.
+            The system extracts questions and converts them so students can take the test online (with timer).
+          </p>
+          <Alert type="danger" message={err} onClose={() => setErr("")} />
+          <Alert type="success" message={msg} onClose={() => setMsg("")} />
+
+          <div className="row g-2 mb-3">
+            <div className="col-md-6">
+              <label className="form-label">Title (optional override)</label>
+              <input className="form-control" value={meta.title} placeholder="Leave blank to auto-detect"
+                onChange={(e) => setMeta({ ...meta, title: e.target.value })} />
+            </div>
+            <div className="col-md-2">
+              <label className="form-label">Total marks</label>
+              <input type="number" className="form-control" min="1" max="50" value={meta.total_marks}
+                onChange={(e) => setMeta({ ...meta, total_marks: +e.target.value })} />
+            </div>
+            <div className="col-md-2">
+              <label className="form-label">Duration (min)</label>
+              <input type="number" className="form-control" min="5" value={meta.duration_minutes}
+                onChange={(e) => setMeta({ ...meta, duration_minutes: +e.target.value })} />
+            </div>
+            <div className="col-md-2">
+              <label className="form-label">Default marks/Q</label>
+              <input type="number" className="form-control" min="1" value={meta.default_marks}
+                onChange={(e) => setMeta({ ...meta, default_marks: +e.target.value })} />
+            </div>
+          </div>
+
+          <div className="mb-3">
+            <label className="form-label">Test file (PDF, DOCX, JSON, TXT)</label>
+            <input type="file" className="form-control"
+              accept=".pdf,.docx,.json,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              onChange={onFile} disabled={busy} />
+            {busy && <div className="small text-muted mt-1">Reading and converting file…</div>}
+          </div>
+
+          <button type="button" className="btn btn-outline-secondary btn-sm mb-3" onClick={downloadSample}>
+            Download sample JSON template
+          </button>
+
+          {preview && (
+            <div className="mb-3">
+              <div className="alert alert-info">
+                <strong>Preview:</strong> {meta.title || preview.title}<br />
+                Source: {source || "file"} · Marks: {meta.total_marks || preview.total_marks} ·
+                Duration: {meta.duration_minutes || preview.duration_minutes} min ·
+                Questions: {(preview.questions || []).length}
+              </div>
+              <div className="card">
+                <div className="card-header">Detected questions</div>
+                <ul className="list-group list-group-flush" style={{ maxHeight: 320, overflow: "auto" }}>
+                  {(preview.questions || []).map((q, i) => (
+                    <li key={i} className="list-group-item">
+                      <strong>Q{i + 1}.</strong> {q.question_text}{" "}
+                      <span className="badge bg-info text-dark">{q.question_type}</span>{" "}
+                      <span className="badge bg-secondary">{q.marks} marks</span>
+                      {q.question_type === "mcq" && q.options && (
+                        <div className="small text-muted mt-1">
+                          {(q.options || []).filter(Boolean).map((o, j) => (
+                            <span key={j} className="me-2">{String.fromCharCode(65 + j)}) {o}</span>
+                          ))}
+                        </div>
+                      )}
+                      {q.correct_answer && <div className="small text-success">Answer: {q.correct_answer}</div>}
+                    </li>
+                  ))}
+                  {!(preview.questions || []).length && (
+                    <li className="list-group-item text-muted">No questions detected yet.</li>
+                  )}
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {rawText && (
+            <details className="mb-3">
+              <summary className="small text-muted">Show extracted text from file</summary>
+              <pre className="small bg-light p-2 mt-2" style={{ maxHeight: 200, overflow: "auto", whiteSpace: "pre-wrap" }}>{rawText}</pre>
+            </details>
+          )}
+
+          <button className="btn btn-brand me-2" disabled={!preview || !(preview.questions || []).length || busy} onClick={doImport}>
+            {busy ? "Working…" : "Import Test into System"}
+          </button>
+          <button className="btn btn-outline-secondary" onClick={() => navigate("tests")}>Cancel</button>
+
+          <hr />
+          <details>
+            <summary className="small text-muted">How to format PDF / Word tests for best results</summary>
+            <div className="small mt-2">
+              <p>Number each question and put options on their own lines:</p>
+              <pre className="bg-light p-2">{"1. Who built the ark? (5 marks)\nA) Noah\nB) Moses\nC) David\nD) Jonah\nAnswer: A\n\n2. Name the first man created by God.\nAnswer: Adam\n\n3. Explain why we should obey God. (10 marks)"}</pre>
+              <p className="mb-0">Scanned image-only PDFs cannot be read without OCR. Use a text-based PDF or DOCX.</p>
+            </div>
+          </details>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditTestPage({ navigate, ctx }) {
+  const testId = ctx.testId;
+  const [test, setTest] = useState(null);
+  const [questions, setQuestions] = useState([]);
+  const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
+  const [editId, setEditId] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [qForm, setQForm] = useState({
+    question_text: "", question_type: "mcq", marks: 1, correct_answer: "",
+    opt_a: "", opt_b: "", opt_c: "", opt_d: ""
+  });
+
+  const load = useCallback(() => {
+    API.get("/tests/" + testId).then((d) => {
+      setTest(d.test);
+      setQuestions(d.questions || []);
+    }).catch((e) => setErr(e.message));
+  }, [testId]);
+  useEffect(() => { load(); }, [load]);
+
+  const totalQ = questions.reduce((s, q) => s + q.marks, 0);
+  const missingAnswers = questions.filter((q) => q.question_type !== "essay" && !(q.correct_answer || "").trim()).length;
+
+  const parseOpts = (q) => {
+    let opts = ["", "", "", ""];
+    try { opts = q.options ? JSON.parse(q.options) : opts; } catch (e) {}
+    while (opts.length < 4) opts.push("");
+    return opts;
+  };
+
+  const addQ = async (e) => {
+    e.preventDefault();
+    setErr(""); setMsg("");
+    try {
+      await API.post("/tests/" + testId + "/questions", qForm);
+      setQForm({ question_text: "", question_type: "mcq", marks: 1, correct_answer: "", opt_a: "", opt_b: "", opt_c: "", opt_d: "" });
+      setMsg("Question added.");
+      load();
+    } catch (ex) { setErr(ex.message); }
+  };
+
+  const delQ = async (qid) => {
+    if (!confirm("Delete this question?")) return;
+    await API.del("/tests/" + testId + "/questions/" + qid);
+    if (editId === qid) setEditId(null);
+    load();
+  };
+
+  const togglePublish = async () => {
+    try {
+      await API.post("/tests/" + testId + "/" + (test.is_published ? "unpublish" : "publish"), {});
+      load();
+      setMsg(test.is_published ? "Unpublished." : "Published!");
+    } catch (ex) { setErr(ex.message); }
+  };
+
+  const startEdit = (q) => {
+    const opts = parseOpts(q);
+    setEditId(q.id);
+    setEditForm({
+      question_text: q.question_text || "",
+      question_type: q.question_type || "mcq",
+      marks: q.marks || 1,
+      correct_answer: q.correct_answer || "",
+      opt_a: opts[0] || "",
+      opt_b: opts[1] || "",
+      opt_c: opts[2] || "",
+      opt_d: opts[3] || "",
+    });
+  };
+
+  const saveEdit = async (e) => {
+    e.preventDefault();
+    setErr(""); setMsg("");
+    try {
+      await API.put("/tests/" + testId + "/questions/" + editId, {
+        question_text: editForm.question_text,
+        question_type: editForm.question_type,
+        marks: editForm.marks,
+        correct_answer: editForm.correct_answer,
+        options: [editForm.opt_a, editForm.opt_b, editForm.opt_c, editForm.opt_d],
+        opt_a: editForm.opt_a,
+        opt_b: editForm.opt_b,
+        opt_c: editForm.opt_c,
+        opt_d: editForm.opt_d,
+      });
+      setEditId(null);
+      setMsg("Question saved. Wording, options, and answer updated.");
+      load();
+    } catch (ex) { setErr(ex.message); }
+  };
+
+  if (!test && !err) return <Loading />;
+  if (err && !test) return <Alert type="danger" message={err} />;
+
+  return (
+    <div>
+      <div className="d-flex justify-content-between mb-3 flex-wrap gap-2">
+        <div>
+          <h2 className="page-title mb-1">{test.title}</h2>
+          <span className="badge bg-secondary me-1">{totalQ} / {test.total_marks} marks</span>
+          <span className="badge bg-secondary me-1">{test.duration_minutes} min</span>
+          {test.is_published ? <span className="badge bg-success">Published</span> : <span className="badge bg-warning text-dark">Draft</span>}
+        </div>
+        <div className="d-flex gap-2">
+          <button className={"btn " + (test.is_published ? "btn-outline-warning" : "btn-success")} onClick={togglePublish}>
+            {test.is_published ? "Unpublish" : "Publish Test"}
+          </button>
+          <button className="btn btn-outline-secondary" onClick={() => navigate("tests")}>Back</button>
+        </div>
+      </div>
+
+      {missingAnswers > 0 && (
+        <div className="alert alert-warning">
+          <strong>{missingAnswers} question(s) still need a correct answer</strong> for auto-grading.
+          Click <strong>Edit</strong> on each one to set the answer (and change wording or options if needed).
+        </div>
+      )}
+
+      <Alert type="danger" message={err} onClose={() => setErr("")} />
+      <Alert type="success" message={msg} onClose={() => setMsg("")} />
+
+      <div className="row g-4">
+        <div className="col-lg-7">
+          <div className="card">
+            <div className="card-header">Questions ({questions.length}) — click Edit to change wording, options, or answers</div>
+            <ul className="list-group list-group-flush">
+              {questions.map((q, i) => {
+                const needsAnswer = q.question_type !== "essay" && !(q.correct_answer || "").trim();
+                const opts = parseOpts(q);
+                return (
+                  <li key={q.id} className="list-group-item">
+                    {editId === q.id ? (
+                      <form onSubmit={saveEdit} className="border rounded p-3 bg-light">
+                        <h6 className="mb-2">Editing Q{i + 1}</h6>
+                        <label className="form-label small mb-1">Question wording</label>
+                        <textarea className="form-control mb-2" rows="3" required value={editForm.question_text}
+                          onChange={(e) => setEditForm({ ...editForm, question_text: e.target.value })} />
+
+                        <div className="row g-2 mb-2">
+                          <div className="col-sm-4">
+                            <label className="form-label small mb-1">Type</label>
+                            <select className="form-select form-select-sm" value={editForm.question_type}
+                              onChange={(e) => setEditForm({ ...editForm, question_type: e.target.value })}>
+                              <option value="mcq">Multiple Choice</option>
+                              <option value="short">Short Answer</option>
+                              <option value="essay">Essay (manual grade)</option>
+                            </select>
+                          </div>
+                          <div className="col-sm-3">
+                            <label className="form-label small mb-1">Marks</label>
+                            <input type="number" className="form-control form-control-sm" min="1" max="50" value={editForm.marks}
+                              onChange={(e) => setEditForm({ ...editForm, marks: +e.target.value })} />
+                          </div>
+                          <div className="col-sm-5">
+                            <label className="form-label small mb-1">Correct answer</label>
+                            <input className="form-control form-control-sm"
+                              placeholder={editForm.question_type === "mcq" ? "A, B, C or D" : editForm.question_type === "short" ? "Exact answer text" : "Optional notes"}
+                              value={editForm.correct_answer}
+                              onChange={(e) => setEditForm({ ...editForm, correct_answer: e.target.value })} />
+                          </div>
+                        </div>
+
+                        {editForm.question_type === "mcq" && (
+                          <div className="mb-2">
+                            <label className="form-label small mb-1">Answer options (editable)</label>
+                            {["a","b","c","d"].map((l) => (
+                              <div className="input-group input-group-sm mb-1" key={l}>
+                                <span className="input-group-text">{l.toUpperCase()}</span>
+                                <input className="form-control" value={editForm["opt_" + l]}
+                                  onChange={(e) => setEditForm({ ...editForm, ["opt_" + l]: e.target.value })}
+                                  placeholder={"Option " + l.toUpperCase()} />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {editForm.question_type === "short" && (
+                          <p className="small text-muted mb-2">Short answers auto-grade by exact match (case ignored).</p>
+                        )}
+                        {editForm.question_type === "essay" && (
+                          <p className="small text-muted mb-2">Essays are graded manually under Submissions.</p>
+                        )}
+
+                        <button type="submit" className="btn btn-sm btn-brand me-1">Save changes</button>
+                        <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => setEditId(null)}>Cancel</button>
+                      </form>
+                    ) : (
+                      <div>
+                        <div className="d-flex justify-content-between align-items-start gap-2">
+                          <div className="flex-grow-1">
+                            <strong>Q{i + 1}.</strong> {q.question_text}{" "}
+                            <span className="badge bg-info text-dark">{q.question_type}</span>{" "}
+                            <span className="badge bg-secondary">{q.marks} marks</span>
+                            {needsAnswer
+                              ? <span className="badge bg-danger ms-1">No answer set</span>
+                              : q.question_type !== "essay"
+                                ? <span className="badge bg-success ms-1">Answer: {q.correct_answer}</span>
+                                : <span className="badge bg-secondary ms-1">Manual grade</span>}
+                            {q.question_type === "mcq" && (
+                              <div className="small text-muted mt-1">
+                                {opts.map((o, j) => o ? (
+                                  <span key={j} className="me-2">{String.fromCharCode(65 + j)}) {o}</span>
+                                ) : null)}
+                              </div>
+                            )}
+                          </div>
+                          <div className="d-flex gap-1 flex-shrink-0">
+                            <button type="button" className={"btn btn-sm " + (needsAnswer ? "btn-warning" : "btn-outline-primary")}
+                              onClick={() => startEdit(q)}>
+                              Edit
+                            </button>
+                            <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => delQ(q.id)}>Delete</button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+              {!questions.length && <li className="list-group-item text-muted">No questions yet. Add some on the right, or import a file.</li>}
+            </ul>
+          </div>
+        </div>
+
+        <div className="col-lg-5">
+          <div className="card p-3">
+            <h5>Add new question</h5>
+            <form onSubmit={addQ}>
+              <label className="form-label small mb-1">Question wording</label>
+              <textarea className="form-control mb-2" rows="2" required placeholder="Type the question…"
+                value={qForm.question_text} onChange={(e) => setQForm({ ...qForm, question_text: e.target.value })} />
+              <select className="form-select mb-2" value={qForm.question_type}
+                onChange={(e) => setQForm({ ...qForm, question_type: e.target.value })}>
+                <option value="mcq">Multiple Choice</option>
+                <option value="short">Short Answer</option>
+                <option value="essay">Essay</option>
+              </select>
+              {qForm.question_type === "mcq" && ["a","b","c","d"].map((l) => (
+                <div className="input-group input-group-sm mb-1" key={l}>
+                  <span className="input-group-text">{l.toUpperCase()}</span>
+                  <input className="form-control" placeholder={"Option " + l.toUpperCase()}
+                    value={qForm["opt_" + l]} onChange={(e) => setQForm({ ...qForm, ["opt_" + l]: e.target.value })} />
+                </div>
+              ))}
+              <input className="form-control mb-2 mt-2" placeholder="Correct answer (A/B/C/D or exact text)"
+                value={qForm.correct_answer} onChange={(e) => setQForm({ ...qForm, correct_answer: e.target.value })} />
+              <input type="number" className="form-control mb-2" min="1" max="50" value={qForm.marks}
+                onChange={(e) => setQForm({ ...qForm, marks: +e.target.value })} />
+              <button className="btn btn-brand w-100">Add Question</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ===== TAKE TEST WITH TIMER + AUTO-SAVE ===== */
+function TakeTestPage({ navigate, ctx }) {
+  const testId = ctx.testId;
+  const [test, setTest] = useState(null);
+  const [questions, setQuestions] = useState([]);
+  const [answers, setAnswers] = useState({});
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(null);
+  const [saveStatus, setSaveStatus] = useState(""); // "", "saving", "saved", "error"
+  const [lastSaved, setLastSaved] = useState(null);
+  const submittedRef = useRef(false);
+  const answersRef = useRef(answers);
+  answersRef.current = answers;
+  const storageKey = "lms_draft_" + testId;
+
+  // Load test + restore draft (server then localStorage)
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const d = await API.get("/tests/" + testId + "/take");
+        if (!alive) return;
+        setTest(d.test);
+        setQuestions(d.questions || []);
+        const mins = d.test.duration_minutes || 60;
+        setSecondsLeft(mins * 60);
+
+        // Try server draft
+        let restored = {};
+        try {
+          const draft = await API.get("/tests/" + testId + "/draft");
+          restored = draft.answers || {};
+        } catch (e) {
+          // already submitted or no draft
+          if (String(e.message).indexOf("Already") !== -1) {
+            setErr(e.message);
+            return;
+          }
+        }
+        // Fallback / merge localStorage
+        try {
+          const local = JSON.parse(localStorage.getItem(storageKey) || "{}");
+          if (local.answers) {
+            restored = Object.keys(restored).length ? restored : local.answers;
+            if (local.secondsLeft && local.secondsLeft < mins * 60) {
+              setSecondsLeft(local.secondsLeft);
+            }
+          }
+        } catch (e) {}
+        if (Object.keys(restored).length) {
+          setAnswers(restored);
+          setSaveStatus("saved");
+          setLastSaved(new Date());
+        }
+      } catch (e) {
+        if (alive) setErr(e.message);
+      }
+    })();
+    return () => { alive = false; };
+  }, [testId]);
+
+  // Auto-save every 15s + on answer change (debounced)
+  useEffect(() => {
+    if (!test || submittedRef.current) return;
+    const hasAnswers = Object.keys(answers).some((k) => (answers[k] || "").trim());
+    if (!hasAnswers) return;
+
+    // Always mirror to localStorage immediately
+    try {
+      localStorage.setItem(storageKey, JSON.stringify({
+        answers,
+        secondsLeft,
+        savedAt: Date.now(),
+      }));
+    } catch (e) {}
+
+    setSaveStatus("saving");
+    const t = setTimeout(async () => {
+      try {
+        await API.post("/tests/" + testId + "/draft", { answers });
+        setSaveStatus("saved");
+        setLastSaved(new Date());
+      } catch (e) {
+        setSaveStatus("error");
+      }
+    }, 1500); // debounce server save
+    return () => clearTimeout(t);
+  }, [answers, test, testId]);
+
+  // Periodic localStorage backup of timer
+  useEffect(() => {
+    if (secondsLeft === null || !test) return;
+    try {
+      const prev = JSON.parse(localStorage.getItem(storageKey) || "{}");
+      localStorage.setItem(storageKey, JSON.stringify({
+        ...prev,
+        answers: answersRef.current,
+        secondsLeft,
+        savedAt: Date.now(),
+      }));
+    } catch (e) {}
+  }, [secondsLeft, test, storageKey]);
+
+  const doSubmit = useCallback(async (auto) => {
+    if (submittedRef.current) return;
+    submittedRef.current = true;
+    setBusy(true);
+    try {
+      const d = await API.post("/tests/" + testId + "/submit", { answers: answersRef.current });
+      try { localStorage.removeItem(storageKey); } catch (e) {}
+      if (auto) alert("Time is up! Your test was submitted automatically.");
+      navigate("result", { submissionId: d.submission_id });
+    } catch (ex) {
+      submittedRef.current = false;
+      setErr(ex.message);
+      setBusy(false);
+    }
+  }, [testId, navigate, storageKey]);
+
+  useEffect(() => {
+    if (secondsLeft === null || secondsLeft < 0) return;
+    if (secondsLeft === 0) {
+      doSubmit(true);
+      return;
+    }
+    const t = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [secondsLeft, doSubmit]);
+
+  const submit = (e) => {
+    e.preventDefault();
+    if (!confirm("Submit your answers now? You cannot change them later.")) return;
+    doSubmit(false);
+  };
+
+  const fmt = (s) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return String(m).padStart(2, "0") + ":" + String(sec).padStart(2, "0");
+  };
+
+  if (err && !test) return <div><Alert type="danger" message={err} /><button className="btn btn-outline-secondary" onClick={() => navigate("tests")}>Back</button></div>;
+  if (!test) return <Loading />;
+
+  const urgent = secondsLeft !== null && secondsLeft <= 60;
+  const saveLabel =
+    saveStatus === "saving" ? "Saving…" :
+    saveStatus === "saved" ? ("Saved" + (lastSaved ? " " + lastSaved.toLocaleTimeString() : "")) :
+    saveStatus === "error" ? "Save failed (kept locally)" : "";
+
+  return (
+    <div>
+      <div className={"timer-box" + (urgent ? " urgent" : "")}>
+        <span>
+          <i className="bi bi-clock me-2"></i>
+          Time remaining: {secondsLeft !== null ? fmt(secondsLeft) : "—"}
+          {urgent && " — Auto-submit at 0:00"}
+        </span>
+        {saveLabel && (
+          <span className="ms-3 small fw-normal">
+            <i className={"bi " + (saveStatus === "saved" ? "bi-cloud-check" : saveStatus === "saving" ? "bi-cloud-upload" : "bi-cloud-slash")}></i>{" "}
+            {saveLabel}
+          </span>
+        )}
+      </div>
+      <div className="card p-4 mb-3">
+        <h2 className="page-title">{test.title}</h2>
+        <span className="badge bg-secondary me-1">{test.total_marks} marks</span>
+        <span className="badge bg-secondary">{test.duration_minutes} min total</span>
+        <p className="small text-muted mb-0 mt-2">Your answers are auto-saved while you work.</p>
+      </div>
+      <Alert type="danger" message={err} />
+      <form onSubmit={submit}>
+        {questions.map((q, i) => {
+          let opts = [];
+          try { opts = q.options ? JSON.parse(q.options) : []; } catch (e) {}
+          return (
+            <div className="card mb-3 q-card" key={q.id}>
+              <div className="card-body">
+                <h5>Q{i + 1} <span className="badge bg-secondary">{q.marks} marks</span></h5>
+                <p>{q.question_text}</p>
+                {q.question_type === "mcq" && ["A","B","C","D"].map((letter, idx) =>
+                  opts[idx] ? (
+                    <div className="form-check" key={letter}>
+                      <input className="form-check-input" type="radio" name={"q" + q.id}
+                        checked={answers[q.id] === letter}
+                        onChange={() => setAnswers({ ...answers, [q.id]: letter })} />
+                      <label className="form-check-label">{letter}. {opts[idx]}</label>
+                    </div>
+                  ) : null
+                )}
+                {q.question_type === "short" && (
+                  <input className="form-control" value={answers[q.id] || ""}
+                    onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })} />
+                )}
+                {q.question_type === "essay" && (
+                  <textarea className="form-control" rows="4" value={answers[q.id] || ""}
+                    onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })} />
+                )}
+              </div>
+            </div>
+          );
+        })}
+        <button className="btn btn-brand btn-lg" disabled={busy}>{busy ? "Submitting…" : "Submit Test"}</button>
+        <button type="button" className="btn btn-outline-secondary btn-lg ms-2" onClick={() => navigate("tests")}>Cancel</button>
+      </form>
+    </div>
+  );
+}
+
+function SubmissionsPage({ navigate }) {
+  const [rows, setRows] = useState([]);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    API.get("/submissions").then((d) => setRows(d.submissions || [])).catch((e) => setErr(e.message));
+  }, []);
+  return (
+    <div>
+      <h2 className="page-title mb-3">Student Submissions</h2>
+      <Alert type="danger" message={err} />
+      <div className="table-responsive">
+        <table className="table table-hover bg-white">
+          <thead className="table-light">
+            <tr><th>Student</th><th>Test</th><th>Status</th><th>Score</th><th>Action</th></tr>
+          </thead>
+          <tbody>
+            {rows.map((s) => (
+              <tr key={s.id}>
+                <td>{s.student_name}</td>
+                <td>{s.test_title}</td>
+                <td>{s.status === "graded" ? <span className="badge bg-success">Graded</span>
+                  : <span className="badge bg-warning text-dark">{s.status}</span>}</td>
+                <td>{s.score != null ? s.score + "/" + s.max_score : "—"}</td>
+                <td>
+                  {s.status === "submitted"
+                    ? <button className="btn btn-sm btn-warning" onClick={() => navigate("grade", { submissionId: s.id })}>Grade</button>
+                    : <button className="btn btn-sm btn-outline-secondary" onClick={() => navigate("result", { submissionId: s.id })}>View</button>}
+                </td>
+              </tr>
+            ))}
+            {!rows.length && <tr><td colSpan="5" className="text-muted">No submissions yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function GradePage({ navigate, ctx }) {
+  const sid = ctx.submissionId;
+  const [sub, setSub] = useState(null);
+  const [answers, setAnswers] = useState([]);
+  const [marks, setMarks] = useState({});
+  const [feedback, setFeedback] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    API.get("/submissions/" + sid).then((d) => {
+      setSub(d.submission);
+      setAnswers(d.answers || []);
+      const m = {};
+      (d.answers || []).forEach((a) => { m[a.id] = a.marks_awarded != null ? a.marks_awarded : ""; });
+      setMarks(m);
+      setFeedback(d.submission.feedback || "");
+    }).catch((e) => setErr(e.message));
+  }, [sid]);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await API.post("/submissions/" + sid + "/grade", { marks, feedback });
+      navigate("submissions");
+    } catch (ex) { setErr(ex.message); setBusy(false); }
+  };
+
+  if (!sub && !err) return <Loading />;
+  if (err && !sub) return <Alert type="danger" message={err} />;
+
+  return (
+    <div>
+      <h2 className="page-title">Grade: {sub.student_name} – {sub.test_title}</h2>
+      <Alert type="danger" message={err} />
+      <form onSubmit={submit}>
+        {answers.map((a) => (
+          <div className="card mb-3" key={a.id}>
+            <div className="card-body">
+              <h6>{a.question_text} <span className="badge bg-secondary">{a.max_marks} marks</span></h6>
+              <div className="bg-light p-2 rounded mb-2">{a.answer_text || "(blank)"}</div>
+              {a.correct_answer && <p className="small text-success">Expected: {a.correct_answer}</p>}
+              <div className="d-flex align-items-center gap-2">
+                <label className="mb-0">Marks</label>
+                <input type="number" className="form-control form-control-sm" style={{ width: 80 }}
+                  min="0" max={a.max_marks} step="0.5" value={marks[a.id]}
+                  onChange={(e) => setMarks({ ...marks, [a.id]: e.target.value })} />
+                <span className="text-muted">/ {a.max_marks}</span>
+              </div>
+            </div>
+          </div>
+        ))}
+        <textarea className="form-control mb-3" rows="2" placeholder="Feedback"
+          value={feedback} onChange={(e) => setFeedback(e.target.value)} />
+        <button className="btn btn-brand btn-lg" disabled={busy}>{busy ? "Saving…" : "Save Grade"}</button>
+        <button type="button" className="btn btn-outline-secondary btn-lg ms-2" onClick={() => navigate("submissions")}>Cancel</button>
+      </form>
+    </div>
+  );
+}
+
+function ResultPage({ navigate, ctx }) {
+  const sid = ctx.submissionId;
+  const [sub, setSub] = useState(null);
+  const [answers, setAnswers] = useState([]);
+  const [err, setErr] = useState("");
+  const [pdfBusy, setPdfBusy] = useState(false);
+
+  useEffect(() => {
+    API.get("/results/" + sid).then((d) => {
+      setSub(d.submission);
+      setAnswers(d.answers || []);
+    }).catch((e) => setErr(e.message));
+  }, [sid]);
+
+  const exportPdf = () => {
+    if (!sub || typeof window.jspdf === "undefined") {
+      alert("PDF library not loaded. Check your internet connection and refresh.");
+      return;
+    }
+    setPdfBusy(true);
+    try {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      const margin = 14;
+      let y = 16;
+
+      doc.setFontSize(16);
+      doc.setTextColor(31, 78, 121);
+      doc.text("Siyafundza LMS – Test Result", margin, y);
+      y += 10;
+
+      doc.setFontSize(11);
+      doc.setTextColor(0, 0, 0);
+      doc.text("Test: " + (sub.test_title || ""), margin, y); y += 6;
+      doc.text("Student: " + (sub.student_name || ""), margin, y); y += 6;
+      doc.text("Status: " + (sub.status || ""), margin, y); y += 6;
+      if (sub.score != null) {
+        doc.setFont(undefined, "bold");
+        doc.text("Score: " + sub.score + " / " + sub.total_marks, margin, y);
+        doc.setFont(undefined, "normal");
+        y += 6;
+      }
+      if (sub.feedback) {
+        doc.text("Feedback: " + sub.feedback, margin, y, { maxWidth: 180 });
+        y += 10;
+      }
+      y += 4;
+
+      const body = answers.map((a, i) => [
+        String(i + 1),
+        (a.question_text || "").slice(0, 80),
+        (a.answer_text || "(blank)").slice(0, 60),
+        (a.marks_awarded != null ? a.marks_awarded : "?") + " / " + a.max_marks,
+      ]);
+
+      doc.autoTable({
+        startY: y,
+        head: [["#", "Question", "Answer", "Marks"]],
+        body: body,
+        styles: { fontSize: 9, cellPadding: 2 },
+        headStyles: { fillColor: [31, 78, 121] },
+        columnStyles: { 0: { cellWidth: 10 }, 3: { cellWidth: 22 } },
+        margin: { left: margin, right: margin },
+      });
+
+      const fname = "result_" + (sub.test_title || "test").replace(/[^a-z0-9]+/gi, "_") + ".pdf";
+      doc.save(fname);
+    } catch (e) {
+      alert("PDF export failed: " + e.message);
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
+  if (!sub && !err) return <Loading />;
+  if (err) return <Alert type="danger" message={err} />;
+  return (
+    <div>
+      <div className="card p-4 mb-4">
+        <div className="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div>
+            <h2 className="page-title">{sub.test_title}</h2>
+            <p className="mb-1">Student: <strong>{sub.student_name}</strong></p>
+            <p className="mb-1">Status: {sub.status === "graded"
+              ? <span className="badge bg-success">Graded</span>
+              : <span className="badge bg-warning text-dark">{sub.status}</span>}</p>
+            {sub.score != null && <h3 className="text-primary mb-0">Score: {sub.score} / {sub.total_marks}</h3>}
+          </div>
+          <button className="btn btn-outline-danger" onClick={exportPdf} disabled={pdfBusy}>
+            <i className="bi bi-file-earmark-pdf"></i> {pdfBusy ? "Creating…" : "Export PDF"}
+          </button>
+        </div>
+        {sub.feedback && <div className="alert alert-info mt-3 mb-0"><strong>Feedback:</strong> {sub.feedback}</div>}
+      </div>
+      {answers.map((a) => (
+        <div className="card mb-2" key={a.id}>
+          <div className="card-body">
+            <h6>{a.question_text}{" "}
+              <span className="badge bg-secondary">{a.marks_awarded != null ? a.marks_awarded : "?"} / {a.max_marks}</span>
+            </h6>
+            <p className="mb-0"><strong>Answer:</strong> {a.answer_text || "(blank)"}</p>
+          </div>
+        </div>
+      ))}
+      <button className="btn btn-outline-secondary mt-3" onClick={() => navigate("dashboard")}>Back to Dashboard</button>
+    </div>
+  );
+}
+
+function UsersPage() {
+  const { user } = useAuth();
+  const [users, setUsers] = useState([]);
+  const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const emptyForm = { full_name: "", username: "", email: "", password: "" };
+  const [form, setForm] = useState(emptyForm);
+  const load = () => API.get("/users").then((d) => setUsers(d.users || [])).catch((e) => setErr(e.message));
+  useEffect(() => { load(); }, []);
+  const addTeacher = async (e) => {
+    e.preventDefault();
+    setErr(""); setMsg(""); setBusy(true);
+    try {
+      const d = await API.post("/users", form);
+      setMsg(d.message || "Teacher created");
+      setForm(emptyForm);
+      load();
+    } catch (ex) { setErr(ex.message); }
+    setBusy(false);
+  };
+  return (
+    <div>
+      <h2 className="page-title mb-3">Registered Users</h2>
+      <Alert type="danger" message={err} onClose={() => setErr("")} />
+      <Alert type="success" message={msg} onClose={() => setMsg("")} />
+      {user.is_admin && (
+        <div className="card p-3 mb-4">
+          <h5 className="mb-3">Add Teacher</h5>
+          <form onSubmit={addTeacher}>
+            <div className="row g-2">
+              {[["full_name", "Full name"], ["username", "Username"], ["email", "Email"], ["password", "Password"]].map(([f, label]) => (
+                <div className="col-md-3" key={f}>
+                  <input className="form-control" placeholder={label} required
+                    type={f === "password" ? "password" : f === "email" ? "email" : "text"}
+                    minLength={f === "password" ? 6 : undefined}
+                    value={form[f]} onChange={(e) => setForm({ ...form, [f]: e.target.value })} />
+                </div>
+              ))}
+            </div>
+            <button className="btn btn-brand mt-3" disabled={busy}>{busy ? "Creating…" : "Create Teacher"}</button>
+          </form>
+        </div>
+      )}
+      <div className="table-responsive">
+        <table className="table table-hover bg-white">
+          <thead className="table-light">
+            <tr><th>ID</th><th>Name</th><th>Username</th><th>Email</th><th>Role</th></tr>
+          </thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.id}>
+                <td>{u.id}</td>
+                <td>{u.full_name}</td>
+                <td>{u.username}</td>
+                <td>{u.email}</td>
+                <td>
+                  <span className={"badge " + (u.role === "teacher" ? "bg-primary" : "bg-secondary")}>{u.role}</span>
+                  {u.is_admin ? <span className="badge bg-dark ms-1">admin</span> : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const { user, loading } = useAuth();
+  const [page, setPage] = useState("dashboard");
+  const [ctx, setCtx] = useState({});
+
+  const navigate = useCallback((next, nextCtx) => {
+    setCtx(nextCtx || {});
+    setPage(next);
+    window.scrollTo(0, 0);
+  }, []);
+
+  if (loading) return <Loading />;
+
+  if (!user) {
+    if (page === "register") return <RegisterPage navigate={navigate} />;
+    return <LoginPage navigate={navigate} />;
+  }
+
+  const teacherOnly = ["create_test", "import_test", "edit_test", "submissions", "grade", "users"];
+  let safePage = page;
+  if (teacherOnly.indexOf(page) !== -1 && user.role !== "teacher") safePage = "dashboard";
+  if ((page === "edit_test" || page === "take_test") && !ctx.testId) safePage = "tests";
+  if ((page === "grade" || page === "result") && !ctx.submissionId) safePage = "dashboard";
+
+  let content = null;
+  try {
+    switch (safePage) {
+      case "resources": content = <ResourcesPage />; break;
+      case "tests": content = <TestsPage navigate={navigate} />; break;
+      case "create_test": content = <CreateTestPage navigate={navigate} />; break;
+      case "import_test": content = <ImportTestPage navigate={navigate} />; break;
+      case "edit_test": content = <EditTestPage navigate={navigate} ctx={ctx} />; break;
+      case "take_test": content = <TakeTestPage navigate={navigate} ctx={ctx} />; break;
+      case "submissions": content = <SubmissionsPage navigate={navigate} />; break;
+      case "grade": content = <GradePage navigate={navigate} ctx={ctx} />; break;
+      case "result": content = <ResultPage navigate={navigate} ctx={ctx} />; break;
+      case "users": content = <UsersPage />; break;
+      default: content = <Dashboard navigate={navigate} />;
+    }
+  } catch (e) {
+    content = <Alert type="danger" message={"Page error: " + e.message} />;
+  }
+
+  return (
+    <ErrorBoundary onReset={() => navigate("dashboard")}>
+      <Navbar page={safePage} navigate={navigate} />
+      <main className="container pb-4">{content}</main>
+      <footer className="text-center text-muted py-3 small">&copy; 2026 Siyafundza Private School LMS</footer>
+    </ErrorBoundary>
+  );
+}
+
+try {
+  const root = ReactDOM.createRoot(document.getElementById("root"));
+  root.render(<AuthProvider><App /></AuthProvider>);
+} catch (err) {
+  document.getElementById("root").innerHTML =
+    '<div style="max-width:600px;margin:2rem auto;padding:1.5rem;background:#f8d7da;border-radius:8px;color:#721c24;">' +
+    "<strong>Failed to start</strong><pre>" + String(err) + "</pre></div>";
+}
+  </script>
+</body>
+</html>

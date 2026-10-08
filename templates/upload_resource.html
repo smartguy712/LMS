@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Share Resource{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-7">
+    <div class="card p-4">
+      <h3 class="mb-3">Share a Resource</h3>
+      <form method="post" enctype="multipart/form-data">
+        <div class="mb-3">
+          <label class="form-label">Title *</label>
+          <input type="text" name="title" class="form-control" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Description</label>
+          <textarea name="description" class="form-control" rows="3"></textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Type</label>
+          <select name="resource_type" class="form-select">
+            <option value="notes">Notes</option>
+            <option value="revision">Revision Exercise</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">File (optional)</label>
+          <input type="file" name="file" class="form-control">
+          <div class="form-text">PDF, Word, PowerPoint, images, text. Max 16 MB.</div>
+        </div>
+        <button type="submit" class="btn btn-brand">Share</button>
+        <a href="{{ url_for('resources') }}" class="btn btn-outline-secondary">Cancel</a>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

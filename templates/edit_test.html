@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Edit Test – {{ test.title }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2>{{ test.title }}</h2>
+    <span class="badge bg-secondary">{{ total_q_marks }} / {{ test.total_marks }} marks used</span>
+    {% if test.is_published %}<span class="badge bg-success">Published</span>
+    {% else %}<span class="badge bg-warning text-dark">Draft</span>{% endif %}
+  </div>
+  <div class="d-flex gap-2">
+    {% if not test.is_published %}
+    <form method="post"><input type="hidden" name="action" value="publish">
+      <button class="btn btn-success">Publish Test</button>
+    </form>
+    {% else %}
+    <form method="post"><input type="hidden" name="action" value="unpublish">
+      <button class="btn btn-outline-warning">Unpublish</button>
+    </form>
+    {% endif %}
+    <a href="{{ url_for('tests') }}" class="btn btn-outline-secondary">Back</a>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-md-7">
+    <div class="card">
+      <div class="card-header">Questions ({{ questions|length }})</div>
+      <ul class="list-group list-group-flush">
+        {% for q in questions %}
+        <li class="list-group-item">
+          <div class="d-flex justify-content-between">
+            <div>
+              <strong>Q{{ loop.index }}.</strong> {{ q.question_text }}
+              <span class="badge bg-info text-dark">{{ q.question_type }}</span>
+              <span class="badge bg-secondary">{{ q.marks }} mark{{ 's' if q.marks != 1 }}</span>
+              {% if q.correct_answer %}<br><small class="text-success">Answer: {{ q.correct_answer }}</small>{% endif %}
+            </div>
+            <form method="post" action="{{ url_for('delete_question', test_id=test.id, qid=q.id) }}" onsubmit="return confirm('Delete question?')">
+              <button class="btn btn-sm btn-outline-danger">×</button>
+            </form>
+          </div>
+        </li>
+        {% else %}
+        <li class="list-group-item text-muted">No questions yet. Add some below.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  <div class="col-md-5">
+    <div class="card p-3">
+      <h5>Add Question</h5>
+      <form method="post">
+        <input type="hidden" name="action" value="add_question">
+        <div class="mb-2">
+          <label class="form-label">Question Text</label>
+          <textarea name="question_text" class="form-control" rows="2" required></textarea>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Type</label>
+          <select name="question_type" class="form-select" id="qtype" onchange="toggleOpts()">
+            <option value="mcq">Multiple Choice</option>
+            <option value="short">Short Answer</option>
+            <option value="essay">Essay / Long Answer</option>
+          </select>
+        </div>
+        <div id="mcq-opts">
+          <div class="mb-1"><input type="text" name="opt_a" class="form-control form-control-sm" placeholder="Option A"></div>
+          <div class="mb-1"><input type="text" name="opt_b" class="form-control form-control-sm" placeholder="Option B"></div>
+          <div class="mb-1"><input type="text" name="opt_c" class="form-control form-control-sm" placeholder="Option C"></div>
+          <div class="mb-2"><input type="text" name="opt_d" class="form-control form-control-sm" placeholder="Option D"></div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Correct Answer <small class="text-muted">(for auto-grade: letter A/B/C/D or exact short answer)</small></label>
+          <input type="text" name="correct_answer" class="form-control" placeholder="e.g. A or Noah">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Marks</label>
+          <input type="number" name="marks" class="form-control" value="1" min="1" max="50">
+        </div>
+        <button type="submit" class="btn btn-brand w-100">Add Question</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function toggleOpts() {
+  const t = document.getElementById('qtype').value;
+  document.getElementById('mcq-opts').style.display = t === 'mcq' ? 'block' : 'none';
+}
+</script>
+{% endblock %}

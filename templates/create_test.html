@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Create Test{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-7">
+    <div class="card p-4">
+      <h3 class="mb-3">Create New Test</h3>
+      <form method="post">
+        <div class="mb-3">
+          <label class="form-label">Title *</label>
+          <input type="text" name="title" class="form-control" required placeholder="e.g. Grade 4 Religious Education – Term 2">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Description</label>
+          <textarea name="description" class="form-control" rows="2"></textarea>
+        </div>
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Total Marks (max 50)</label>
+            <input type="number" name="total_marks" class="form-control" value="50" min="1" max="50">
+          </div>
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Duration (minutes)</label>
+            <input type="number" name="duration_minutes" class="form-control" value="60" min="5">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-brand">Create & Add Questions</button>
+        <a href="{{ url_for('tests') }}" class="btn btn-outline-secondary">Cancel</a>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

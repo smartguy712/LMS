@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Student Dashboard{% endblock %}
+{% block content %}
+<h2 class="mb-4">Student Dashboard</h2>
+<div class="row g-4">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between">
+        <span>Available Tests</span>
+        <a href="{{ url_for('tests') }}" class="btn btn-sm btn-outline-primary">View All</a>
+      </div>
+      <ul class="list-group list-group-flush">
+        {% for t in tests %}
+        <li class="list-group-item d-flex justify-content-between">
+          <span>{{ t.title }} <span class="badge bg-secondary">{{ t.total_marks }} marks</span></span>
+          <a href="{{ url_for('take_test', test_id=t.id) }}" class="btn btn-sm btn-brand">Take Test</a>
+        </li>
+        {% else %}
+        <li class="list-group-item text-muted">No tests available yet.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">My Recent Results</div>
+      <ul class="list-group list-group-flush">
+        {% for s in my_subs %}
+        <li class="list-group-item d-flex justify-content-between">
+          <span>{{ s.test_title }}
+            {% if s.status == 'graded' %}
+              <span class="badge bg-success">{{ s.score }}/{{ s.max_score }}</span>
+            {% else %}
+              <span class="badge bg-warning text-dark">{{ s.status }}</span>
+            {% endif %}
+          </span>
+          <a href="{{ url_for('view_result', submission_id=s.id) }}" class="btn btn-sm btn-outline-secondary">View</a>
+        </li>
+        {% else %}
+        <li class="list-group-item text-muted">No submissions yet.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between">
+        <span>Recent Shared Resources</span>
+        <a href="{{ url_for('resources') }}" class="btn btn-sm btn-outline-primary">Browse All</a>
+      </div>
+      <ul class="list-group list-group-flush">
+        {% for r in resources %}
+        <li class="list-group-item">
+          <strong>{{ r.title }}</strong>
+          <span class="badge bg-info text-dark">{{ r.resource_type }}</span>
+          <small class="text-muted">by {{ r.uploader_name }}</small>
+        </li>
+        {% else %}
+        <li class="list-group-item text-muted">No resources shared yet.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}

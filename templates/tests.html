@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Tests{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2>{% if current_user.is_teacher %}My Tests{% else %}Available Tests{% endif %}</h2>
+  {% if current_user.is_teacher %}
+  <a href="{{ url_for('create_test') }}" class="btn btn-brand">+ Create Test</a>
+  {% endif %}
+</div>
+<div class="row g-3">
+  {% for t in tests %}
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-body">
+        <h5>{{ t.title }}</h5>
+        <p class="text-muted small">{{ t.description or '' }}</p>
+        <span class="badge bg-secondary">{{ t.total_marks }} marks</span>
+        <span class="badge bg-secondary">{{ t.duration_minutes }} min</span>
+        {% if current_user.is_teacher %}
+          {% if t.is_published %}<span class="badge bg-success">Published</span>
+          {% else %}<span class="badge bg-warning text-dark">Draft</span>{% endif %}
+        {% endif %}
+      </div>
+      <div class="card-footer bg-white d-flex gap-2">
+        {% if current_user.is_teacher %}
+        <a href="{{ url_for('edit_test', test_id=t.id) }}" class="btn btn-sm btn-primary">Edit / Questions</a>
+        <form method="post" action="{{ url_for('delete_test', test_id=t.id) }}" onsubmit="return confirm('Delete this test and all submissions?')">
+          <button class="btn btn-sm btn-outline-danger">Delete</button>
+        </form>
+        {% else %}
+        <a href="{{ url_for('take_test', test_id=t.id) }}" class="btn btn-sm btn-brand">Take Test</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="col-12"><div class="alert alert-info">No tests found.</div></div>
+  {% endfor %}
+</div>
+{% endblock %}

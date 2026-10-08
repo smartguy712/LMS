@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Grade Submission{% endblock %}
+{% block content %}
+<h2>Grade: {{ sub.student_name }} – {{ sub.test_title }}</h2>
+<p class="text-muted">Total possible: {{ sub.total_marks }} marks</p>
+<form method="post">
+  {% for a in answers %}
+  <div class="card mb-3">
+    <div class="card-body">
+      <h6>{{ a.question_text }} <span class="badge bg-secondary">{{ a.max_marks }} marks</span>
+        <span class="badge bg-info text-dark">{{ a.question_type }}</span>
+      </h6>
+      <p class="mb-1"><strong>Student answer:</strong></p>
+      <div class="bg-light p-2 rounded mb-2">{{ a.answer_text or '(blank)' }}</div>
+      {% if a.correct_answer %}
+      <p class="small text-success mb-2">Expected: {{ a.correct_answer }}</p>
+      {% endif %}
+      <div class="row align-items-center">
+        <div class="col-auto">
+          <label class="form-label mb-0">Marks awarded</label>
+        </div>
+        <div class="col-auto">
+          <input type="number" name="marks_{{ a.id }}" class="form-control form-control-sm" style="width:80px"
+                 value="{{ a.marks_awarded if a.marks_awarded is not none else '' }}"
+                 min="0" max="{{ a.max_marks }}" step="0.5">
+        </div>
+        <div class="col-auto text-muted small">/ {{ a.max_marks }}</div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+  <div class="mb-3">
+    <label class="form-label">Feedback (optional)</label>
+    <textarea name="feedback" class="form-control" rows="2">{{ sub.feedback or '' }}</textarea>
+  </div>
+  <button type="submit" class="btn btn-brand btn-lg">Save Grade</button>
+  <a href="{{ url_for('submissions') }}" class="btn btn-outline-secondary btn-lg">Cancel</a>
+</form>
+{% endblock %}

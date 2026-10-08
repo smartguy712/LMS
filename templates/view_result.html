@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Result – {{ sub.test_title }}{% endblock %}
+{% block content %}
+<div class="card p-4 mb-4">
+  <h2>{{ sub.test_title }}</h2>
+  <p>Student: <strong>{{ sub.student_name }}</strong></p>
+  <p>Status:
+    {% if sub.status == 'graded' %}<span class="badge bg-success">Graded</span>
+    {% else %}<span class="badge bg-warning text-dark">{{ sub.status }}</span>{% endif %}
+  </p>
+  {% if sub.score is not none %}
+  <h3 class="text-primary">Score: {{ sub.score }} / {{ sub.total_marks }}</h3>
+  {% endif %}
+  {% if sub.feedback %}
+  <div class="alert alert-info mt-2"><strong>Teacher feedback:</strong> {{ sub.feedback }}</div>
+  {% endif %}
+</div>
+{% for a in answers %}
+<div class="card mb-2">
+  <div class="card-body">
+    <h6>{{ a.question_text }}
+      <span class="badge bg-secondary">
+        {% if a.marks_awarded is not none %}{{ a.marks_awarded }}{% else %}?{% endif %} / {{ a.max_marks }}
+      </span>
+    </h6>
+    <p class="mb-0"><strong>Your answer:</strong> {{ a.answer_text or '(blank)' }}</p>
+    {% if a.correct_answer and current_user.is_teacher %}
+    <p class="small text-success mb-0">Correct: {{ a.correct_answer }}</p>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+<a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary mt-3">Back to Dashboard</a>
+{% endblock %}

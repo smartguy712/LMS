@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Submissions{% endblock %}
+{% block content %}
+<h2 class="mb-3">Student Submissions</h2>
+<div class="table-responsive">
+  <table class="table table-hover bg-white">
+    <thead class="table-light">
+      <tr>
+        <th>Student</th>
+        <th>Test</th>
+        <th>Status</th>
+        <th>Score</th>
+        <th>Submitted</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in submissions %}
+      <tr>
+        <td>{{ s.student_name }}</td>
+        <td>{{ s.test_title }}</td>
+        <td>
+          {% if s.status == 'graded' %}<span class="badge bg-success">Graded</span>
+          {% elif s.status == 'submitted' %}<span class="badge bg-warning text-dark">Needs Grading</span>
+          {% else %}<span class="badge bg-secondary">{{ s.status }}</span>{% endif %}
+        </td>
+        <td>{% if s.score is not none %}{{ s.score }}/{{ s.max_score }}{% else %}—{% endif %}</td>
+        <td>{{ s.submitted_at[:16] if s.submitted_at else '—' }}</td>
+        <td>
+          {% if s.status == 'submitted' %}
+          <a href="{{ url_for('grade_submission', submission_id=s.id) }}" class="btn btn-sm btn-warning">Grade</a>
+          {% else %}
+          <a href="{{ url_for('view_result', submission_id=s.id) }}" class="btn btn-sm btn-outline-secondary">View</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-muted">No submissions yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

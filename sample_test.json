@@ -1,0 +1,32 @@
+{
+  "title": "Grade 4 Religious Education \u2013 Sample Test",
+  "description": "Sample imported test with timer support",
+  "total_marks": 20,
+  "duration_minutes": 30,
+  "questions": [
+    {
+      "question_text": "Who built the ark?",
+      "question_type": "mcq",
+      "marks": 5,
+      "correct_answer": "A",
+      "options": [
+        "Noah",
+        "Moses",
+        "David",
+        "Jonah"
+      ]
+    },
+    {
+      "question_text": "Name the first man created by God.",
+      "question_type": "short",
+      "marks": 5,
+      "correct_answer": "Adam"
+    },
+    {
+      "question_text": "Explain why we should obey God. Give two reasons.",
+      "question_type": "essay",
+      "marks": 10,
+      "correct_answer": ""
+    }
+  ]
+}
